@@ -36,14 +36,39 @@ weights_df.shape == stReturn.shape
 
 reload(br)
 res = br.BacktestingRebalanceDollarAmountLevel0(weightsDF=weights_df,closeDF=adjClose, returnDF=stReturn, capital=capital,period=1200, lookback=lookback)
-res.plot()
-
-
-
+res.plot
 
 print ('{0}:  {1:.4f}'.format('ir0'.ljust(6), 0.1543453))
 
 
 for x in range(1,11):
    print '{0:2d} {1:3d} {2:4d}'.format(x, x*x, x*x*x)
+
+
+
+import numpy as np
+from numpy.random import random
+import pandas as pd
+import time
+
+a=pd.DataFrame(random((1000,40)))
+
+start = time.time()
+
+for i in xrange(10000):
+    a - a
+
+end = time.time()
+
+end - start
+
+
+start = time.time()
+
+for i in xrange(10000):
+    a.values - a.values
+
+end = time.time()
+
+end - start
 

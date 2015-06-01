@@ -5,8 +5,27 @@ import numpy as np
 import pandas as pd
 
 
-def computeMaxDrawDown(priceSerie, capital) :
-    return (np.max(priceSerie) - np.min(priceSerie)) / float(capital)
+
+
+def computeMaxDrawDown(priceSeries, capital):
+    size = len(priceSeries)
+    arr_min = np.empty(size)
+
+    tmp_min = np.inf
+    for i in xrange(size):
+        pos = size-1-i
+        val = priceSeries[pos]
+        if (val < tmp_min) :
+            tmp_min = val
+        arr_min[pos] = tmp_min
+
+    return np.max(priceSeries - arr_min) / float(capital)
+
+
+
+
+
+
 
 
 
