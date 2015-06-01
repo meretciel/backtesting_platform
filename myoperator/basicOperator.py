@@ -55,7 +55,6 @@ def op_mean(df, period) :
     return output_df
 
 
-
 def op_rank(df) :
     mat = df.values
     df_new = pd.DataFrame(mat.argsort(axis=1), index=df.index, columns=df.columns)
@@ -67,4 +66,10 @@ def op_scale(df):
     row_std  = df.std(axis=1)
     df_new = (df.sub(row_mean, axis=0)).div(row_std,axis=0)
     return df_new
+
+
+def op_strategy_add(df1,df2,coef1=0.5,coef2=0.5) :
+    return coef1 * op_scale(df1) + coef2 * op_scale(df2)
+
+
 
