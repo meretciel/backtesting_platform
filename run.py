@@ -1,7 +1,7 @@
 __author__ = 'ruikun'
 
 
-#test
+
 import numpy as np
 import pandas as pd
 import os
@@ -19,17 +19,33 @@ open     = pd.read_pickle(r'./data/open_dataframe')
 low      = pd.read_pickle(r'./data/low_dataframe')
 high     = pd.read_pickle(r'./data/high_dataframe')
 volume   = pd.read_pickle(r'./data/volume_dataframe')
+ret      = stReturn
 
 
+from myoperator.basicOperator import *
 from backtesting.backtesting_rebalance import BacktestingRebalanceDollarAmountLevel0 as bktestor
+from backtesting.backtesting_rebalance import BacktestingRebalanceLevel1 as mytestor
 
 
-strategy = stReturn * 0.2 + 0.8 * open / close
+
+strategy = op_neutralize(stReturn * 0.2 + 0.8 * open / close)
 
 
-res = bktestor(weightsDF=strategy, closeDF=adjClose, returnDF=stReturn, capital=3000, period= 60, lookback=5)
+
+strategy = op_marketneutralize(-op_mean(ret,5))
+expression = 'op_marketneutralize(-op_mean(ret,5))'
+
+
+
+res = mytestor(weightsDF=strategy, closeDF=adjClose, returnDF=stReturn, capital=3000, period= 3, lookback=10, expression=expression)
+#res = mytestor(weightsDF=strategy, closeDF=adjClose, returnDF=stReturn, capital=3000, period= 3, lookback=10, expression=None)
+
 res.plot()
 
+adjClose[:5].to_csv('adjClose_example.csv')
+strategy[10:15].to_csv('str_example.csv')
 
+
+ret[10:15].to_csv('return.csv')
 
 
