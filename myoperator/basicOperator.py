@@ -10,7 +10,6 @@ def op_lag(df, lag=1) :
     :param df: dataframe representing the economic variables
     :param lag: lag period
     :return: a lagged dataframe
-
     The lagged dataframe will contain NaN.
     """
 
@@ -29,6 +28,22 @@ def op_neutralize(df) :
     return df.sub(row_means, axis=0)
 
 
+def op_marketneutralize(df) :
+    mat = op_neutralize(df).values
+    mat_pos = np.where(mat > 0, mat,0)
+    mat_neg = np.where(mat <=0, mat, 0)
+    row_sum_pos = mat_pos.sum(axis=1)
+    row_sum_neg = mat_neg.sum(axis=1)
+    nrow,ncol = df.shape
+    mat_pos_new = mat_pos / row_sum_pos.reshape((nrow,1))
+    mat_neg_new = mat_neg / row_sum_neg.reshape((nrow,1))
+    mat_pos_new[np.isnan(mat_pos_new)] = 0
+    mat_neg_new[np.isnan(mat_neg_new)] = 0
+    return pd.DataFrame(mat_pos_new - mat_neg_new, index=df.index, columns=df.columns)
+
+
+
+
 
 # rolling mean and std
 
@@ -41,7 +56,6 @@ def op_mean(df, period) :
     :param df: dataframe
     :param period: the size of the moving window
     :return: new dataframe that contains the simple moving average
-
     This function compute the time sereis of the moving average for each column
     in the original dataframe.
     """
@@ -70,6 +84,3 @@ def op_scale(df):
 
 def op_strategy_add(df1,df2,coef1=0.5,coef2=0.5) :
     return coef1 * op_scale(df1) + coef2 * op_scale(df2)
-
-
-

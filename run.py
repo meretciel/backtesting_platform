@@ -42,10 +42,5 @@ res = mytestor(weightsDF=strategy, closeDF=adjClose, returnDF=stReturn, capital=
 
 res.plot()
 
-adjClose[:5].to_csv('adjClose_example.csv')
-strategy[10:15].to_csv('str_example.csv')
-
-
-ret[10:15].to_csv('return.csv')
 
 
