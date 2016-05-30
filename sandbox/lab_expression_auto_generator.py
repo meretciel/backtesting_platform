@@ -53,7 +53,9 @@ Implementation Details:
 
 """
 
+import random
 
+built_in_operators = ['+', '-', '*', '/']
 
 
 user_defined_operators = [
@@ -71,6 +73,13 @@ user_defined_variables = [
     'low',
     'close',
     'volatility',
+]
+
+secondary_operator_pool = [
+    'my_op1(rtn,1,2)',
+    'my_op1(adjClose)',
+    'my_op2(open,adjClose)',
+    'my_op3(low,2)'
 ]
 
 
@@ -135,6 +144,7 @@ class ExpressionVisitor(ast.NodeVisitor):
         self.list_operator_scope = []
         self._expression = []
         self._variable_position = []
+        self._number_position = []
 
 
     def visit_Name(self, node):
@@ -188,6 +198,7 @@ class ExpressionVisitor(ast.NodeVisitor):
 
     def visit_Num(self,node):
         self._expression.append(str(node.n))
+        self._number_position.append(len(self._expression) - 1)
 
 
     def visit_BinOp(self, node):
@@ -233,10 +244,17 @@ class ExpressionVisitor(ast.NodeVisitor):
     @property
     def variable_position(self):
         return copy.deepcopy(self._variable_position)
+
+
+    @property
+    def number_position(self):
+        return copy.deepcopy(self._number_position)
     
     
     def getStrExpression(self):
         return ''.join(self._expression)
+
+
 
 
 
@@ -431,5 +449,116 @@ expr_3 = 'close + my_op1(0.3 * adjClose, my_op2(volatility * 2) - rtn)'
 print (crossover(expr_2, expr_3))
 
 """
+
+
+
+
+
+
+
+
+
+expr_2 = 'my_op1(adjClose, 3,2) + 0.7 * (open - close)'
+expr_3 = 'close + my_op1(0.3 * adjClose, my_op2(volatility * 2) - rtn)'
+
+
+expr2_visitor = ExpressionVisitor()
+expr3_visitor = ExpressionVisitor()
+
+expr2_visitor.visit(ast.parse(expr_2))
+expr3_visitor.visit(ast.parse(expr_3))
+
+print (expr2_visitor.variables)
+print (expr2_visitor.operators)
+print (expr2_visitor.operator_scope)
+print (expr2_visitor.expression)
+print (expr2_visitor.variable_position)
+print (expr2_visitor.getStrExpression())
+
+
+
+print (expr3_visitor.variables)
+print (expr3_visitor.operators)
+print (expr3_visitor.operator_scope)
+print (expr3_visitor.expression)
+
+
+
+"""
+In this section, we will implementat the mutate operator.
+
+Like crossover operator, here we also have two possibility:
+    (1) apply mutate operator only on user-defined variables or built-in operators
+    (2) add user-defined operators to the end of the expression
+
+Note that in the current implementation, we do not mutate the user-defined operators. The reasons is the signature
+of user-defined operators are quite different case by case. If we mutatet the user-defined operators, it is hard to
+guarantee the new operator is a valid operators.
+
+"""
+
+
+
+def mutate(expr, p_var=0.02, p_op=0.02, p_num=0.05, p_div=0.02, p_addOp=0.05):
+    visitor = ExpressionVisitor()
+    visitor.visit(ast.parse(expr))
+
+    variables         = visitor.variables
+    variable_position = visitor.variable_position
+    expression        = visitor.expression
+    number_position   = visitor.number_position
+
+    rand_var = np.random.uniform()
+
+
+    # mutate the user-defined variables
+    rand_var = np.random.uniform(size=len(variable_position))
+    for k, item in enumerate(variable_position):
+        if rand_var[k] < p_var:  # do a mutation
+            expression[item[1]] = random.choice(user_defined_variables)
+
+
+    # mutate the built-in operators
+    for i in xrange(len(expression)):
+        if expression[i] in built_in_operators:
+            rand_op = np.random.uniform()
+            if rand_op < p_op:
+                new_op = random.choice(built_in_operators)
+                if new_op == '/':
+                    # this part is to reduce the appearance of the division operator.
+                    # because if the new operator is '/', it is not guaranteed that it can be compiled
+                    expression[i] = new_op if np.random.uniform() < p_div else expression[i]
+                else:
+                    expression[i] = new_op
+
+
+    # mutate the numbers
+    rand_num = np.random.uniform(size=len(number_position))
+    rand_normal = np.random.normal(0, 0.05, len(rand_num))
+
+    for k, item in enumerate(number_position):
+        if rand_num[k] < p_num:     # mutation on numbers
+            n = float(expression[item]) * (1. + rand_normal[k])
+            expression[item] = str(n)
+
+
+    # mutation: if we add more user-defined operators
+    rand_addOp = np.random.uniform()
+    if rand_addOp < p_addOp:
+        new_subexpression = ''.join([ '+', '1.0', '*' , random.choice(secondary_operator_pool)])
+        expression.append(new_subexpression)
+
+    return ''.join(expression)
+
+
+
+# ==== Test =====
+expr_3 = 'close + my_op1(0.3 * adjClose, my_op2(volatility * 2) - rtn)'
+visitor = ExpressionVisitor()
+visitor.visit(ast.parse(expr_3))
+print visitor.number_position
+
+for i in xrange(100):
+    print  mutate(expr_3, p_addOp=0.03)
 
 
