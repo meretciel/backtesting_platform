@@ -31,13 +31,18 @@ from backtesting.backtesting_rebalance import BacktestingRebalanceLevel1 as myte
 strategy = op_neutralize(stReturn * 0.2 + 0.8 * open / close)
 
 
-
 strategy = op_marketneutralize(-op_mean(ret,5))
 expression = 'op_marketneutralize(-op_mean(ret,5))'
 
 
 
-res = mytestor(weightsDF=strategy, closeDF=adjClose, returnDF=stReturn, capital=3000, period= 3, lookback=10, expression=expression)
+res = mytestor(weightsDF=strategy,
+               closeDF=adjClose,
+               returnDF=stReturn,
+               capital=3000,
+               period= 3,
+               lookback=10,
+               expression=expression)
 #res = mytestor(weightsDF=strategy, closeDF=adjClose, returnDF=stReturn, capital=3000, period= 3, lookback=10, expression=None)
 
 res.plot()
