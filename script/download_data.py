@@ -1,4 +1,28 @@
 
+
+"""
+Script: download_data.py
+
+This script will help to download stock price data from Yahoo finance. Once we have the data available, we can store
+it in csv or pickle format.
+
+
+After downloading the data from Yahoo, a data-cleaning process is required. Most of the time, the data has two dimensions,
+stock name and stock price attributes such as date, open, low, high, close, adjClose and volume.
+
+In our design, we want to have data grouped by attribute. For example, if the attribute of interest in closed price,
+we will have a DataFrame called close. The index is the date, each column will represent a stock.
+
+
+Attention:
+    Double check the calculation of the stock return DataFrame. Do not use "future data" in the current calculation.
+    
+"""
+
+
+
+
+
 import pandas as pd
 import numpy as np
 from pandas.io.data import DataReader
