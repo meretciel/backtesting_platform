@@ -54,10 +54,18 @@ Implementation Details:
 """
 
 import random
+import ast
+import copy
+import numpy as np
 
+# built-in operators are common mathematical operators. For now, we only focus on add, subtract, multiplication and
+# division. In the future, we may include comparison operators and others
 built_in_operators = ['+', '-', '*', '/']
 
 
+# Here we need to populate the user-defined operators.
+# In the current design, only built-in and user-defined operators are allowed in the expression.
+# However, an operator is essentially a function, in the future, we may allow python built-in function in the expression
 user_defined_operators = [
     'my_op1',
     'my_op2',
@@ -65,6 +73,12 @@ user_defined_operators = [
 ]
 
 
+# user-defined variables are the variables of interest in the research such as adjClose price of stock.
+# When the expression mutates, it will select one of the variables defined here and replace the one in the expression.
+# If a variable does not appear here, it will not be selected in the mutation process
+
+# Note that the pre-defined keywords in python are not allowed to be a user-defined variable.
+# For example, 'return' should be avoid.
 user_defined_variables = [
     'rtn',
     'adjClose',
@@ -75,6 +89,10 @@ user_defined_variables = [
     'volatility',
 ]
 
+
+# The secondary_operator_pool contains operators that might be selected in the mutation process.
+# In the mutation process, a new operator may be added to the end of the original expression. This is operator should be
+# pre-defined in the sense that an operator may need some parameters.
 secondary_operator_pool = [
     'my_op1(rtn,1,2)',
     'my_op1(adjClose)',
@@ -83,12 +101,11 @@ secondary_operator_pool = [
 ]
 
 
+"""
+
 expr_1 = 'return + 0.4 * my_op2(adjClose, volatility)'
 expr_2 = 'my_op1(adjClose, 3,2) + 0.7 * (open - close)'
 
-
-
-"""
 we will define two crossover operation:
 
 The first one is to apply crossover operator only on user defined variables
@@ -126,24 +143,48 @@ new_expr_2 = 'return + 0.7 * (open - close)'
 
 
 """
-import ast
-import copy
-import numpy as np
 
-
-expr_1 = 'rtn + 0.4 * my_op2(adjClose, volatility)'
-expr_2 = 'my_op1(adjClose, 3,2) + 0.7 * (open - close)'
-expr_3 = 'close + my_op1(0.3 * adjClose, my_op2(volatility * 2) - rtn)'
 
 
 
 class ExpressionVisitor(ast.NodeVisitor):
+    """
+    The ExpressionVisitor class help to scan an expression. It takes advantages of the built-in ast package. The main
+    functionality is to extract the user-defined variables/operators and numbers/constants from the expression.
+
+    Note that we can achieve the same effect using regular expression. However, we find that it is easier to parse the
+    expression with ast than using regExp. Another reason is performance. It seems that regExp has exponential complexity.
+    We think ast may perform better.
+    """
     def __init__(self):
         self.list_variables_exclude_operators = []
         self.list_user_defined_operators = []
+
+
+        # We keep track of the scope of each operator.
+        # The item in self_list_operator_scope is a tuple of lenght 3.
+        # For example, if (x,y,z) is in self.list_operator_scope, it means that
+        # self._expression[y:z] represents the self.list_user_defined_operators[x]
         self.list_operator_scope = []
+
+
+        # self._expression contains the parsed expression. It is a list and each element is one component in the
+        # original expression. Note that we may find some parenthesis in this self._expression which do not exist in
+        # the original expression. It should not have any effect. The two expressions should be mathematically equivalanet.
+        # Also, we do not concern about cummulating the parenthesis because when ast parse the expression, it will remove
+        # the parenthesis
         self._expression = []
+
+
+        # We keep track of the position of each user-defined variable
+        # The item in the self._variable_position is a tuple of length 2.
+        # For example, if (x,y) is in self._variable_position, it means
+        # self._expression[y] == self.list_variables_exclude_operators[x]
         self._variable_position = []
+
+
+        # we also keep track the position of each number/constant in the expression
+        # The item in the self._number_position is an interger
         self._number_position = []
 
 
@@ -257,7 +298,7 @@ class ExpressionVisitor(ast.NodeVisitor):
 
 
 
-
+expr_1 = 'rtn + 0.4 * my_op2(adjClose, volatility)'
 expr_2 = 'my_op1(adjClose, 3,2) + 0.7 * (open - close)'
 expr_3 = 'close + my_op1(0.3 * adjClose, my_op2(volatility * 2) - rtn)'
 
@@ -562,3 +603,5 @@ for i in xrange(100):
     print  mutate(expr_3, p_addOp=0.03)
 
 
+
+# test git
