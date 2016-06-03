@@ -12,74 +12,124 @@ to evaluate the input strategy.
 
 
 
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
 import pandas as pd
 import backtesting_helperFun as bkhp
 import matplotlib.pyplot as plt
 
+import backtesting.analyser as _analyser
+import backtesting.portfolio as _portfolio
+import backtesting.rebalancer as _rebalancer
 
 
 
 
-class SimulatorBase(object) :
 
-    def __init__(self):
+class Simulator(object):
+    """
+    Here we define the interface of a simulator. It has two components and three methods.
+    The two components are
+        portfolio:  Portfolio object describing the attributes of the portfolio
+        rebalancer: Rebalancer object which is responsible for rebalancing the portfolio
+        analyser:   Analyser object which provides the functionality to analyze the results.
 
-        self._rebalance         = None
-        self._transaction_cost  = None
-        self._market_impact     = None
-        self._strategy          = None
-        self._initial_capital   = None
-        self._lookback          = None
-        self._statistic         = None
+    The three methods are
+        simulate:     simulate the backtesting process
+        analyze:      analyze the backtesting results
+        summarize:    generate reports of the analysis
+    """
+    __metaclass__ = ABCMeta
+
+
+    @abstractmethod
+    def simulate(self):
+        pass
+
+    @abstractmethod
+    def analyze(self):
+        pass
+
+    @abstractmethod
+    def summarize(self):
+        pass
 
 
 
-        self._config           = {
 
-        }
 
-        self._weightDF   = None
-        self._adjCloseDF = None
-        self._returnDF   = None
+class MyFirstSimulator(Simulator) :
+
+    def __init__(self, strategyMat=None, priceMat=None, portfolio=None, rebalancer=None, analyser=None, fitness_measure=None,lookback=20):
+        if not (strategyMat and priceMat and portfolio and rebalancer and analyser):
+            raise ValueError("strategyMat and priceMat are required.")
+
+        self._portfolio       = portfolio
+        self._rebalancer      = rebalancer
+        self._analyser        = analyser
+        self._fitness_measure = fitness_measure
+        self._statistics      = None
+
+
+        # load the weights matrix of the strategy and normalize it
+        self._strategyMat = strategyMat.apply(self._portfolio.normalize_weights, axis=1)
+
+        self._priceMat    = priceMat
+        self._lookback    = lookback
+
+        # compute the return matrix for future use
+        priceMat_lag_1    = self._priceMat.shift(1)
+        self._returnMat   = self._priceMat / priceMat_lag_1 - 1.
+
+
+
 
 
 
     def simulate(self):
 
 
-        weightMat     = self._weightDF.values[self._lookback:]
-        adjCloseMat   = self._adjCloseDF.values[self._lookback:]
-        returnMat     = self._returnDF.values[self._lookback:]
+        weightMat     = self._strategyMat.values[self._lookback:, :]
+        priceMat      = self._priceMat.values[self._lookback:, :]
+        returnMat     = self._returnMat.values[self._lookback:, :]
+        dates         = self._strategyMat.index
 
-        curr_portfolio     = weightMat[0,:] * self._initial_capital
-        prev_portfolio     = curr_portfolio.copy()
+        # load the priceMat for the rebalancer
+        self._rebalancer.load_priceMat(priceMat)
 
-        periods     = weightMat.shape[0]
+        curr_portfolio = self._portfolio.get_initial_portfolio(weightMat[0,:])
+        ndays          = weightMat.shape[0]
+        portfolio_val  = np.zeros(ndays)
+        portfolio_val  = self._portfolio.initial_capital
 
-        portfolio_value    = np.zeros(periods)
-        portfolio_value[0] = self._initial_capital
+        portfolio_position = np.zeros_like(weightMat)
+        portfolio_position[0, :] = curr_portfolio
+
+        for t in xrange(1, ndays):
+            # Attention: we are at the end of t-th day
+            # Do not use information from the future!!!
+
+            # get the curr portfolio position at the end of the t-th day
+            curr_portfolio = curr_portfolio * (1. + returnMat[t, :])
+            portfolio_val[t]  = np.sum(curr_portfolio)
+
+            # rebalance the portfolio if necessary
+            curr_portfolio = self._rebalancer.rebalance_portfolio(t, curr_portfolio,weightMat[t,:])
+
+            portfolio_position[t,:] = curr_portfolio
 
 
-        # in sample simulation
-        for t_day in xrange(1, periods):
-            curr_portfolio         = prev_portfolio * (1. + returnMat[t_day,:])
-            curr_portfolio_value   = np.sum(curr_portfolio)
-            portfolio_value[t_day] = curr_portfolio_value
+        # collect all the statistics
+        transaction_cost = self._rebalancer.get_trading_cost()
+        transaction_cost.index = dates
 
-            # Rebalance the portoflio
-            curr_portfolio = self._rebalance.rebalance_portfolio(t_day, weightMat, curr_portfolio, adjCloseMat, returnMat)
-            prev_portfolio = curr_portfolio.copy()
+        self._statistics = pd.DataFrame(portfolio_position, index=dates, columns=self._strategyMat.columns)
+        self._statistics['portfolio_val'] = portfolio_val
 
+        self._statistics = pd.concat([self._statistics, transaction_cost], axis=1)
 
 
-        self._portfolio_statistic = pd.DataFrame({
-            'date':             self._strategy.index.values[self._lookback:],
-            'portfolio_val':    portfolio_value,
-            'trading_cost':     self._rebalance.get_trading_cost(),
-            'transaction_cost': self._rebalance.get_transaction_cost(),
-            'market_impact':    self._rebalance.get_market_impact_estimate,
-        })
 
 
     def analyze(self):
@@ -106,15 +156,15 @@ class SimulatorBase(object) :
         The second part is considered as the "out-of-sample test". (Strictly speaking, we do not have the in-sample test.)
 
         """
+        self._analyser.portfolio = self._portfolio
+        self._analyser.portfolio_statistics  = self._statistics
 
-        df_work = self._portfolio_statistic
-
-        nrow, ncol = df_work.shape
-
-
+        self._analyser.process()
 
 
 
+    def summarize(self):
+        self._analyser.summarize()
 
 
 
@@ -183,4 +233,6 @@ class SimulatorBase(object) :
         plt.show()
 
 
-
+    @property
+    def statistics(self):
+        return getattr(self, '_statistics', None)
