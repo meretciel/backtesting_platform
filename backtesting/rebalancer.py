@@ -1,7 +1,4 @@
 
-
-
-
 """
 Script: rebalancer.py
 
@@ -14,22 +11,33 @@ implemented in rebalancer object.
 
 
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 import numpy as np
-import backtesting.setting as _bsetting
+import pandas as pd
+import backtesting.transactionCostModel as _transactionCostModel
 
 
-# Define the base class of Rebalancer object.
 
-def Rebalancer(object):
+class Rebalancer(object):
     __metaclass__ = ABCMeta
+
 
     transaction_cost_model = None           # Todo: to be implemented
     market_impact_model    = None           # Todo: to be implemented
 
 
+    def load_price(self, priceMat):
+        """
+        Load the stock price.
+
+        Args:
+            priceMat: np.array. This is 2d array representing the stock prices.
+
+        """
+        self._priceMat = priceMat
+
     @abstractmethod
-    def rebalance_portfolio(self, curr_t, stock_price, curr_portfolio, target_weights):
+    def rebalance_portfolio(self, curr_t, curr_portfolio, target_weights):
         """
         This function will rebalance the portfolio and return the new weights. The new weights depends on the portfolio
         type and also the model we use when we rebalance the portfolio. The model of interests includes transaction
@@ -41,9 +49,7 @@ def Rebalancer(object):
         Args:
             curr_t:               int. It is the index of the array, which indicates the "time" of current period.
                                   We impose the curr_t >= 1 because there is nothing we can do at the starting point (period = 0)
-            stock_price:          np.array. This is a 2-d array. It represents the stock prices. We need this information
-                                  to update the weights array and calculate the trading cost.
-            curr_weights:         np.array. This is a one-dimension array representing the components of hte current portfolio
+            curr_portfolio:       np.array. This is a one-dimension array representing the components of hte current portfolio
             target_weights:       np.array. This is a one-dimension array representing the target weights of each
                                   stock in the portfolio at the current period. The weights is described by the
                                   strategy matrix.
@@ -65,4 +71,68 @@ def Rebalancer(object):
 
 
 
-# define custormized version of the rebalancer.
+# define customized version of the rebalancer.
+
+class DollarNeutralPortfolioPeriodicRebalancer(Rebalancer):
+    transaction_cost_model = _transactionCostModel.FlatFeeTransactionModel(fraction=0.004)
+
+    def __init__(self, frequency=4, deviation=0.02, priceMat=None):
+        self._frequency = frequency
+        self._deviation = deviation
+
+        self._priceMat = priceMat
+        self._ndays, self._nstocks = self._priceMat.shape
+
+
+        # initialize the transaction cost and the positions in the portfolio.
+        self._transaction_cost = np.zeros(self._ndays)
+        self._position         = np.zeros_like(self._priceMat)
+
+
+    def rebalance_portfolio(self, curr_t, curr_portfolio, target_weights):
+        if self._priceMat is None:
+            raise ValueError("self._priceMat is None. Please load the priceMat before calling the rebalance_portfolio function.")
+
+        # if the curr_t is not a multiple of the frequency of rebalance, we return the original portfolio
+        # and no transaction occurs.
+
+        if  curr_t % self._frequency != 0:
+            return curr_portfolio
+
+
+        # calculate the current weights of each stock in the portfolio
+        pos_index    = curr_portfolio > 0
+        neg_index    = curr_portfolio < 0
+
+        pos_position = np.sum(curr_portfolio[pos_index])
+        neg_position = np.sum(curr_portfolio[neg_index])
+        target_pos_portfolio = pos_position * target_weights[pos_index]
+        target_neg_portfolio = neg_position * target_weights[neg_index]
+
+        target_portfolio = np.zeros_like(curr_portfolio)
+        target_portfolio[pos_position] = target_pos_portfolio
+        target_portfolio[neg_position] = target_neg_portfolio
+
+        diff_portfolio = target_portfolio - curr_portfolio
+
+        diff_perct_portfolio = diff_portfolio / target_portfolio
+
+        index_stock_to_rebalance = np.abs(diff_perct_portfolio) > self._deviation
+
+        new_portfolio = curr_portfolio.copy()
+        new_portfolio[index_stock_to_rebalance] = target_portfolio[index_stock_to_rebalance]
+
+        if self.transaction_cost_model:
+            self._transaction_cost[curr_t] = self.transaction_cost_model.estimate_cost(curr_t, self._priceMat, curr_portfolio, new_portfolio)
+
+        return new_portfolio
+
+
+    def get_trading_cost(self):
+        return pd.DataFrame({'transaction_cost': self._transaction_cost})
+
+
+
+
+
+
