@@ -1,5 +1,15 @@
 
 
+"""
+Script: analyser.py
+
+In this script, we will define the analyser class. The main functionality provided by the analyser class is to measuring
+the performance of the portfolio in question. It performs the analysis based on the type of portfolio and the rebalance
+process.
+
+In the analyser class, we will also define some utility function to measure the performance.
+
+"""
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import numpy as np
@@ -14,22 +24,28 @@ class AnalyserBase(object):
     def __init__(self):
         self._portfolio = None
         self._portfolio_statistics = None
-
+        self._rebalancer = None
+        self._summary = None
 
     @abstractmethod
     def process(self):
         pass
 
-    @abstractmethod
-    def summarize(self):
-        """
-        This function will summarize the results of the analysis.
-        """
-        pass
 
-    @abstractproperty
+    def summarize(self):
+        s_analyser   = str(self)
+        s_portfolio  = str(self._portfolio)
+        s_rebalancer = str(self._rebalancer)
+        s_aggregated = '\n'.join([s_analyser, s_portfolio, s_rebalancer])
+
+        print(s_aggregated)
+        print("\nPortfolio Performance\n")
+        print(self._summary)
+
+    @property
     def summary(self):
-        pass
+        return self._summary
+
 
     @property
     def portfolio(self):
@@ -94,35 +110,32 @@ class AnalyserBase(object):
 
 
 
-class DollarNeutralPortfolioAnalyser(AnalyserBase):
 
+class DollarNeutralPortfolioAnalyser(AnalyserBase):
     def __str__(self):
         line = 'DollarNeutralPortfolioAnalyser'
         line_ = '='*(len(line))
         return '\n'.join([line_, line, line_])
 
-
     def _analyze(self, n , portfolio_value):
         initial_capital = portfolio_value[:self._rebalancer._frequency].mean()
-        daily_rtn = np.log(portfolio_value[1:]) - np.log(portfolio_value[:-1])
-        annual_return = np.exp(np.log((np.mean(portfolio_value[-self._rebalancer._frequency:]) / initial_capital))  * 252. / float(n)) - 1.
-        volatility    = np.std(daily_rtn) * np.sqrt(252.)
-        sharpe_ratio  =annual_return / volatility
-        MDD, winLenMDD = self.calculate_maximum_drawdown(portfolio_value)
+        daily_rtn       = np.log(portfolio_value[1:]) - np.log(portfolio_value[:-1])
+        annual_return   = np.exp(np.log((np.mean(portfolio_value[-self._rebalancer._frequency:]) / initial_capital))  * 252. / float(n)) - 1.
+        volatility      = np.std(daily_rtn) * np.sqrt(252.)
+        sharpe_ratio    = annual_return / volatility
+        MDD, winLenMDD  = self.calculate_maximum_drawdown(portfolio_value)
         return annual_return, sharpe_ratio, MDD, winLenMDD
 
 
     def process(self):
-
         assert self._portfolio is not None
         assert self._portfolio_statistics is not None
         assert self._rebalancer is not None
 
-
         initial_capital = self._portfolio.initial_capital
         ndays = self._portfolio_statistics.shape[0]
 
-        # extract informaiton from the portfolio_statistics which as pd.DataFrame
+        # extract information from the portfolio_statistics which as pd.DataFrame
         account_value_pre_cost   = initial_capital + self._portfolio_statistics['account_value_pre_cost'].values
         account_value_after_cost = initial_capital + self._portfolio_statistics['account_value_after_cost'].values
 
@@ -131,17 +144,10 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
 
 
         # full period analysis
-
-        # full period without transaction cost
         self.full_pre_cost = self._analyze(ndays, account_value_pre_cost)
-
-        # full period with transaction cost
         self.full_with_cost = self._analyze(ndays, account_value_after_cost)
 
         # out-of-sample analysis
-        # arr = account_value_pre_cost[n_in_sample - 2 * self._rebalancer._frequency: n_in_sample]
-        # out_of_sample_initial_account_value = arr.mean()
-
         out_of_sample_portfolio_value_pre_cost  = account_value_pre_cost[n_in_sample:]
         out_of_sample_portfolio_value_with_cost = account_value_after_cost[n_in_sample:]
         out_of_sample_n                         = len(out_of_sample_portfolio_value_pre_cost)
@@ -155,27 +161,10 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
                list(self.out_of_sample_pre_cost),
                list(self.out_of_sample_with_cost)]
         self._summary = pd.DataFrame(arr,
-                                     columns = ['Rtn','IR','MDD','LMDD'],
+                                     columns = ['RTN','IR','MDD','LMDD'],
                                      index   = ['pre_cost','with_cost','oos_pre_cost','oos_with_cost'])
 
 
 
-    def summarize(self):
-
-        s_analyser   = str(self)
-        s_portfolio  = str(self._portfolio)
-        s_rebalancer = str(self._rebalancer)
-
-        s_aggregated = '\n'.join([s_analyser, s_portfolio, s_rebalancer])
-
-
-        print(s_aggregated)
-        print("\nPortfolio Performance\n")
-        print(self._summary)
-
-
-    @property
-    def summary(self):
-        return self._summary
 
 
