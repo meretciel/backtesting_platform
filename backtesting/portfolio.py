@@ -1,6 +1,6 @@
 
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
@@ -21,6 +21,9 @@ class PortfolioBase():
     """
     __metaclass__ = ABCMeta
 
+    # def __get__(self, instance, owner):
+    #     return self
+    #
 
     def __init__(self, initial_capital=100000., max_margin=0.5):
         self._initial_capital = initial_capital
@@ -74,6 +77,11 @@ class DollarNeutralPortfolio(PortfolioBase):
         super(DollarNeutralPortfolio, self).__init__(initial_capital, max_margin)
         self._portfolio_type  = _bsetting.DOLLAR_NEUTRAL_PORTFOLIO
 
+    def __str__(self):
+        line_1 = "\nDollarNeutralPortfolio"
+        line_2 = "\t{:<20}: {:>14.2f}".format('initial capital', self._initial_capital)
+        return '\n'.join([line_1, line_2])
+
 
     def normalize_weights(self, weights):
 
@@ -89,7 +97,7 @@ class DollarNeutralPortfolio(PortfolioBase):
         neg_sum = neg_weights.sum()
         pos_sum = pos_weights.sum()
 
-        if neg_sum.sum() < -0.0001:
+        if neg_sum < -0.0001:
             neg_weights = -neg_weights / neg_sum
         else:
             neg_weights = 0.

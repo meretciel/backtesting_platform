@@ -62,8 +62,8 @@ class Simulator(object):
 class MyFirstSimulator(Simulator) :
 
     def __init__(self, strategyMat=None, priceMat=None, portfolio=None, rebalancer=None, analyser=None, fitness_measure=None,lookback=20):
-        if not (strategyMat and priceMat and portfolio and rebalancer and analyser):
-            raise ValueError("strategyMat and priceMat are required.")
+        if any(v is None for v in [strategyMat, priceMat, portfolio, rebalancer, analyser]):
+            raise ValueError("Some parameters are missing.")
 
         self._portfolio       = portfolio
         self._rebalancer      = rebalancer
@@ -93,15 +93,15 @@ class MyFirstSimulator(Simulator) :
         weightMat     = self._strategyMat.values[self._lookback:, :]
         priceMat      = self._priceMat.values[self._lookback:, :]
         returnMat     = self._returnMat.values[self._lookback:, :]
-        dates         = self._strategyMat.index
+        dates         = self._strategyMat.index.values[self._lookback:]
 
         # load the priceMat for the rebalancer
         self._rebalancer.load_priceMat(priceMat)
 
-        curr_portfolio = self._portfolio.get_initial_portfolio(weightMat[0,:])
-        ndays          = weightMat.shape[0]
-        portfolio_val  = np.zeros(ndays)
-        portfolio_val  = self._portfolio.initial_capital
+        curr_portfolio    = self._portfolio.get_initial_portfolio(weightMat[0,:])
+        ndays             = weightMat.shape[0]
+        portfolio_val     = np.zeros(ndays)
+        portfolio_val[0]  = curr_portfolio.sum()
 
         portfolio_position = np.zeros_like(weightMat)
         portfolio_position[0, :] = curr_portfolio
@@ -121,13 +121,27 @@ class MyFirstSimulator(Simulator) :
 
 
         # collect all the statistics
-        transaction_cost = self._rebalancer.get_trading_cost()
-        transaction_cost.index = dates
 
-        self._statistics = pd.DataFrame(portfolio_position, index=dates, columns=self._strategyMat.columns)
-        self._statistics['portfolio_val'] = portfolio_val
+        # extract information from rebalancer. This information is more about the transaction cost
+        # the result is a DataFrame which has the following columns:
+        #   (1) transaction_cost
+        #   (2) cash_account
+        trading_cost = self._rebalancer.get_trading_cost()
+        trading_cost.index = dates
 
-        self._statistics = pd.concat([self._statistics, transaction_cost], axis=1)
+
+
+        self._statistics = pd.DataFrame(portfolio_position, index=dates, columns=self._strategyMat.columns.map(lambda x: x + '_position'))
+
+        self._statistics = pd.concat([self._statistics,
+                                      self._strategyMat.rename(columns=lambda x: x + '_target_weight').reindex(dates),
+                                      self._returnMat.rename(columns=lambda x:  x + '_return').reindex(dates),
+                                      trading_cost], axis=1)
+
+        self._statistics['portfolio_value'] = portfolio_val
+        self._statistics['account_value_pre_cost']   = self._statistics.eval('portfolio_value + cash_account')
+        self._statistics['account_value_after_cost'] = self._statistics.eval('account_value_pre_cost - transaction_cost')
+        self._statistics.index.name = 'date'
 
 
 
@@ -156,26 +170,21 @@ class MyFirstSimulator(Simulator) :
         The second part is considered as the "out-of-sample test". (Strictly speaking, we do not have the in-sample test.)
 
         """
-        self._analyser.portfolio = self._portfolio
+        self._analyser.portfolio             = self._portfolio
         self._analyser.portfolio_statistics  = self._statistics
+        self._analyser.rebalancer            = self._rebalancer
 
         self._analyser.process()
 
 
 
     def summarize(self):
+        # TODO: add information about portfolio,
         self._analyser.summarize()
 
 
 
-    def report(self):
-        print('Statistics of the strategy:')
-        print ('{0}:  {1:+.4f}'.format('ir0'.ljust(6),  self.sharpeRatio))
-        print ('{0}:  {1:+.4f}'.format('ret0'.ljust(6), self.returnOfPortfolio))
-        print ('{0}:  {1:+.4f}'.format('dd0'.ljust(6),  self.maxDrawDown))
-        print ('{0}:  {1:+.4f}'.format('ir2'.ljust(6),  self.sharpeRatio_part2))
-        print ('{0}:  {1:+.4f}'.format('ret2'.ljust(6), self.returnOfPortfolio_part2))
-        print ('{0}:  {1:+.4f}'.format('dd2'.ljust(6),  self.maxDrawDown_part2))
+
 
 
 
@@ -236,3 +245,4 @@ class MyFirstSimulator(Simulator) :
     @property
     def statistics(self):
         return getattr(self, '_statistics', None)
+

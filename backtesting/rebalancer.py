@@ -26,7 +26,8 @@ class Rebalancer(object):
     market_impact_model    = None           # Todo: to be implemented
 
 
-    def load_price(self, priceMat):
+    @abstractmethod
+    def load_priceMat(self, priceMat):
         """
         Load the stock price.
 
@@ -34,7 +35,7 @@ class Rebalancer(object):
             priceMat: np.array. This is 2d array representing the stock prices.
 
         """
-        self._priceMat = priceMat
+        pass
 
     @abstractmethod
     def rebalance_portfolio(self, curr_t, curr_portfolio, target_weights):
@@ -74,18 +75,33 @@ class Rebalancer(object):
 # define customized version of the rebalancer.
 
 class DollarNeutralPortfolioPeriodicRebalancer(Rebalancer):
-    transaction_cost_model = _transactionCostModel.FlatFeeTransactionModel(fraction=0.004)
+    transaction_cost_model = _transactionCostModel.FlatFeeTransactionCostModel(fraction=0.004)
 
-    def __init__(self, frequency=4, deviation=0.02, priceMat=None):
-        self._frequency = frequency
-        self._deviation = deviation
+    def __str__(self):
+        line_1 = "\nDollarNeutralPortfolioPeriodicRebalancer"
 
+        line_2 = "\t{:<20}: {:>14.2f}".format('initial capital', self._initial_capital)
+        line_3 = "\t{:<20}: {:>14d}".format('frequency', self._frequency)
+        line_4 = "\t{:<20}: {:>14.4f}".format('deviation', self._deviation)
+
+        line_5 = str(self.transaction_cost_model)
+
+        return '\n'.join([line_1, line_2, line_3, line_4, line_5])
+
+    def __init__(self, frequency=4, deviation=0.02, initial_capital=None):
+        assert initial_capital is not None, "initail_capital is required for this dollar neutral rebalancer."
+        self._frequency      = frequency
+        self._deviation      = deviation
+        self._initial_capital= initial_capital
+
+
+    def load_priceMat(self, priceMat):
         self._priceMat = priceMat
         self._ndays, self._nstocks = self._priceMat.shape
 
-
         # initialize the transaction cost and the positions in the portfolio.
         self._transaction_cost = np.zeros(self._ndays)
+        self._cash_account     = np.zeros(self._ndays)
         self._position         = np.zeros_like(self._priceMat)
 
 
@@ -97,39 +113,49 @@ class DollarNeutralPortfolioPeriodicRebalancer(Rebalancer):
         # and no transaction occurs.
 
         if  curr_t % self._frequency != 0:
+            self._cash_account[curr_t] = self._cash_account[curr_t-1]
+            self._transaction_cost[curr_t] = self._transaction_cost[curr_t-1]
             return curr_portfolio
-
 
         # calculate the current weights of each stock in the portfolio
         pos_index    = curr_portfolio > 0
         neg_index    = curr_portfolio < 0
 
-        pos_position = np.sum(curr_portfolio[pos_index])
-        neg_position = np.sum(curr_portfolio[neg_index])
-        target_pos_portfolio = pos_position * target_weights[pos_index]
-        target_neg_portfolio = neg_position * target_weights[neg_index]
+        target_pos_portfolio = self._initial_capital * target_weights[pos_index]
+        target_neg_portfolio = self._initial_capital * target_weights[neg_index]
 
         target_portfolio = np.zeros_like(curr_portfolio)
-        target_portfolio[pos_position] = target_pos_portfolio
-        target_portfolio[neg_position] = target_neg_portfolio
+        target_portfolio[pos_index] = target_pos_portfolio
+        target_portfolio[neg_index] = target_neg_portfolio
 
         diff_portfolio = target_portfolio - curr_portfolio
 
         diff_perct_portfolio = diff_portfolio / target_portfolio
 
+        # the rebalance happens only when the deviation of the current portfolio from the target portfolio
+        # is larger than a pre-defined level
         index_stock_to_rebalance = np.abs(diff_perct_portfolio) > self._deviation
 
         new_portfolio = curr_portfolio.copy()
         new_portfolio[index_stock_to_rebalance] = target_portfolio[index_stock_to_rebalance]
 
+        # Note that this rebalance mechanism is not sefl-financing, therefore the rebalance process may
+        # generate a cash flow
+        self._cash_account[curr_t] = curr_portfolio.sum() - new_portfolio.sum() + self._cash_account[curr_t-1]
+
+
         if self.transaction_cost_model:
-            self._transaction_cost[curr_t] = self.transaction_cost_model.estimate_cost(curr_t, self._priceMat, curr_portfolio, new_portfolio)
+            self._transaction_cost[curr_t] = self.transaction_cost_model.estimate_cost(curr_t, self._priceMat, curr_portfolio, new_portfolio) + \
+                                             self._transaction_cost[curr_t-1]
 
         return new_portfolio
 
 
     def get_trading_cost(self):
-        return pd.DataFrame({'transaction_cost': self._transaction_cost})
+        return pd.DataFrame({
+            'transaction_cost': self._transaction_cost,
+            'cash_account':     self._cash_account
+        })
 
 
 
