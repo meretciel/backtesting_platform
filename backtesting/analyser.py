@@ -9,6 +9,20 @@ process.
 
 In the analyser class, we will also define some utility function to measure the performance.
 
+For the current implementation, we will only focus on the following portfolio statistics:
+    (1) Sharpe ratio
+    (2) Annual return
+    (3) Maximum drawdown
+    (4) Window length of the maximum drawdown
+
+
+In the analysis, we will generate two sets of results: (1) statistics of the full backtesting period and
+(2) statistics of the last 1/3 of the period.
+
+The second part is considered as the "out-of-sample test". (Strictly speaking, we do not have the in-sample test.
+
+
+
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -32,15 +46,17 @@ class AnalyserBase(object):
         pass
 
 
-    def summarize(self):
+    def summarize(self, to_print=True):
         s_analyser   = str(self)
         s_portfolio  = str(self._portfolio)
         s_rebalancer = str(self._rebalancer)
         s_aggregated = '\n'.join([s_analyser, s_portfolio, s_rebalancer])
 
-        print(s_aggregated)
-        print("\nPortfolio Performance\n")
-        print(self._summary)
+        out = '\n'.join([s_aggregated, "\nPortfolio Performance\n",repr(self._summary)])
+
+        if to_print:
+            print(out)
+        return out
 
     @property
     def summary(self):
@@ -124,7 +140,7 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
         volatility      = np.std(daily_rtn) * np.sqrt(252.)
         sharpe_ratio    = annual_return / volatility
         MDD, winLenMDD  = self.calculate_maximum_drawdown(portfolio_value)
-        return annual_return, sharpe_ratio, MDD, winLenMDD
+        return annual_return, sharpe_ratio, volatility, MDD, winLenMDD
 
 
     def process(self):
@@ -136,12 +152,11 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
         ndays = self._portfolio_statistics.shape[0]
 
         # extract information from the portfolio_statistics which as pd.DataFrame
-        account_value_pre_cost   = initial_capital + self._portfolio_statistics['account_value_pre_cost'].values
-        account_value_after_cost = initial_capital + self._portfolio_statistics['account_value_after_cost'].values
+        account_value_pre_cost   =  initial_capital + self._portfolio_statistics['account_value_pre_cost'].values
+        account_value_after_cost =  initial_capital + self._portfolio_statistics['account_value_after_cost'].values
 
         # We use the last 1/3 part of the data as the out-of-sample data
         n_in_sample = int(ndays * _setting.IN_SAMPLE_PORTION)
-
 
         # full period analysis
         self.full_pre_cost = self._analyze(ndays, account_value_pre_cost)
@@ -161,7 +176,7 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
                list(self.out_of_sample_pre_cost),
                list(self.out_of_sample_with_cost)]
         self._summary = pd.DataFrame(arr,
-                                     columns = ['RTN','IR','MDD','LMDD'],
+                                     columns = ['RTN','IR','VOL', 'MDD','LMDD'],
                                      index   = ['pre_cost','with_cost','oos_pre_cost','oos_with_cost'])
 
 

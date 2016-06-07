@@ -10,7 +10,7 @@ import backtesting.simulator as _simulator
 from myoperator.basicOperator import *  # TODO: this is not a good practice here, try to find another solution
 MyFirstSimulator = _simulator.MyFirstSimulator
 
-
+tmp_dir = r'/Users/Ruikun/workspace/backtesting_platform_local/tmp'
 
 
 #### Prepare the data ####
@@ -40,29 +40,36 @@ rebalancer.transaction_cost_model.fraction = 0.001
 
 
 analyser  = _analyser.DollarNeutralPortfolioAnalyser()
-
 priceMat = adjClose.copy()
 
 
 simulator = MyFirstSimulator(
-    strategyMat=strategyMat,
-    priceMat=priceMat,
+    priceDF=priceMat,
     portfolio=portfolio,
     rebalancer=rebalancer,
     analyser=analyser
 )
 
 
-simulator.simulate()
+simulator.simulate(strategyMat, expression='-op_mean(rtn,5)')
 simulator.analyze()
-
 simulator.summarize()
+
+
+simulator.generate_report(output_path=path.join(tmp_dir, 'test_report.pdf'))
 
 # print (simulator.summarize())
 
+# from datetime import datetime
+# prefix = 'test_plot_'
+# suffix = datetime.now().strftime('%Y_%m_%d_%H_%M')
+# filename = ''.join([prefix, suffix, '.png'])
+#
+# simulator.plot(save_plot=True, output_path=path.join(tmp_dir, filename))
 
+# simulator.plot()
 
-
+#
 # from datetime import datetime
 # prefix = 'test_'
 # suffix = datetime.now().strftime('%Y_%m_%d_%H_%M')

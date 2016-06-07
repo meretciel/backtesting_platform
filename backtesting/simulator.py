@@ -14,7 +14,11 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+from os import path
+from datetime import datetime
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
 
 
 class Simulator(object):
@@ -76,8 +80,13 @@ class MyFirstSimulator(Simulator) :
 
 
 
-    def simulate(self, strategyDF):
+    def simulate(self, strategyDF, expression=None):
         assert strategyDF.shape == self._priceDF.shape
+
+        if expression:
+            self._expression = expression
+
+
         self._strategyDF = strategyDF.apply(self._portfolio.normalize_weights, axis=1)
 
         weightMat     = self._strategyDF.values[self._lookback:, :]
@@ -133,6 +142,79 @@ class MyFirstSimulator(Simulator) :
         self._statistics['account_value_after_cost'] = self._statistics.eval('account_value_pre_cost - transaction_cost')
         self._statistics.index.name = 'date'
 
+    def plot(self, save_plot=False, output_path=None):
+        cols = ['account_value_pre_cost',
+                'account_value_after_cost',
+                'portfolio_value',
+                'cash_account',
+                'transaction_cost']
+        df = self._statistics[cols].copy()
+        df.index = df.index.map(lambda x: pd.to_datetime(x).strftime("%m/%d/%y"))
+
+        ax = df[cols].plot(title='Performance of Portfolio')
+
+        ax.legend(loc=2, prop={'size':8})
+        ax.set_xlabel('date')
+        ax.set_ylabel('value')
+
+        lst_location = [x for x in range(df.shape[0]) if x % 30 == 0]
+        ax.axvline(int(df.shape[0] * 0.67), linestyle=':', color='grey')
+        ax.set_xticks(lst_location)
+        ax.set_xticklabels(df.index[lst_location])
+        ax.xaxis.grid(False)
+
+        xlocs, xlabels = plt.xticks()
+        ylocs, ylabels = plt.yticks()
+        plt.setp(xlabels, rotation=90, fontsize=8)
+        plt.setp(ylabels, fontsize=8)
+        plt.subplots_adjust(bottom=0.1)
+
+
+
+        if not save_plot:
+            plt.show()
+        elif output_path:
+            plt.savefig(output_path)
+            plt.close()
+        else:
+            plt.close()
+
+
+    def generate_report(self, output_path=None):
+        """
+        This function will generate the PDF report. The output_path is the full path of the pdf file. It need to include
+        the filename.
+        """
+        assert output_path, "An output path is required."
+        _dir = path.abspath(path.join(output_path, '..'))
+        _time = datetime.now().strftime("%Y_%m_%m_%H_%M")
+        plot_path = path.join(_dir, ''.join(['plot_', _time, '.png']))
+        pdf_path  = output_path
+        self.plot(save_plot=True, output_path=plot_path)
+
+        c = canvas.Canvas(pdf_path, pagesize=A4)
+        c.setFont('Courier', 12)
+        c.drawString(280, 750, "Report")
+        c.drawString(220, 730, datetime.now().ctime())
+        c.drawImage(plot_path, 45, 390, width=18 * cm, height=11.5 * cm)
+
+        string_to_write = self.summarize(to_print=False)
+
+        dy = 10
+        x  = 60
+        y = 360
+
+        for line in string_to_write.split('\n'):
+            line = line.replace('\t', ' '*4) or ' '
+            # print(line)
+            c.drawString(x, y, line)
+            y = y - dy
+            if y <= 0:
+                y = 720
+                c.showPage()
+                c.setFont('Courier', 12)
+
+        c.save()
 
 
 
@@ -146,13 +228,21 @@ class MyFirstSimulator(Simulator) :
         self._analyser.portfolio             = self._portfolio
         self._analyser.portfolio_statistics  = self._statistics
         self._analyser.rebalancer            = self._rebalancer
-
         self._analyser.process()
 
 
 
-    def summarize(self):
-        self._analyser.summarize()
+    def summarize(self, to_print=True):
+        line = 'Strategy Expression'
+        line_ = '=' * len(line)
+
+        line_2 = self._analyser.summarize(to_print=False)
+        out =  '\n'.join([line_, line, line_, '\n', self._expression, '\n', line_2])
+
+        if to_print:
+            print(out)
+
+        return out
 
 
     @property
