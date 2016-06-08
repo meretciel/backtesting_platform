@@ -1,7 +1,7 @@
 
 
 """
-Script: download_data.py
+Script: download_stock_price_data.py
 
 This script will help to download stock price data from Yahoo finance. Once we have the data available, we can store
 it in csv or pickle format.
@@ -16,7 +16,7 @@ we will have a DataFrame called close. The index is the date, each column will r
 
 Attention:
     Double check the calculation of the stock return DataFrame. Do not use "future data" in the current calculation.
-    
+
 """
 
 
