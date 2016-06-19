@@ -99,7 +99,7 @@ def download(start_date=None, end_date=None, list_stock=None, output_path=None):
     low.to_csv(path.join(output_path,           'low.csv'))
     high.to_csv(path.join(output_path,         'high.csv'))
     volume.to_csv(path.join(output_path,     'volume.csv'))
-    adjClose.to_csv(path.join(output_path, 'ajdClose.csv'))
+    adjClose.to_csv(path.join(output_path, 'adjClose.csv'))
 
 
     rtn = adjClose / adjClose.shift(1) - 1.
