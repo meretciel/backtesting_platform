@@ -18,6 +18,11 @@ import pandas as pd
 _file_to_skip = ['fundamental_data_of_stocks.csv']
 
 
+def get_available_variable_names(data_dir):
+    available_variable_names = [re.sub('\.csv$', '', x) for x in os.listdir(data_dir) \
+                                if not x in _file_to_skip and re.search('\.csv$', x)]
+    return available_variable_names
+
 
 
 def load_variables(stocks=None, data_dir=None, variables=None, global_dict=None):
@@ -42,13 +47,20 @@ def load_variables(stocks=None, data_dir=None, variables=None, global_dict=None)
 
     stocks = [x.upper() for x in stocks]
     available_file = [x for x in os.listdir(data_dir) if not x in _file_to_skip]
+    list_var_name  = []
 
     # load the DataFrame and add it to the global namespace
     for filename in available_file:
+        if not re.search('\.csv$', filename):
+            continue
         var_name = re.sub('\.csv$', '', filename)
         # if the variables is not the one use wants to select, we skip the loading process
         if variables and not var_name in variables:
             continue
+
+        print("{:<10} {}".format("loading", var_name))
+        list_var_name.append(var_name)
+
         # read the files and set index to Date
         df = pd.read_csv(path.join(data_dir, filename))
         df['Date'] = pd.to_datetime(df['Date'])
@@ -58,6 +70,8 @@ def load_variables(stocks=None, data_dir=None, variables=None, global_dict=None)
             df = df.reindex(columns=stocks)
         # add to global namespace
         global_dict[var_name] = df.copy()
+
+    return list_var_name
 
 
 if __name__ == '__main__':

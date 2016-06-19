@@ -145,8 +145,14 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
 
     def process(self):
         assert self._portfolio is not None
-        assert self._portfolio_statistics is not None
         assert self._rebalancer is not None
+
+        self._summary = None
+
+        if self._portfolio_statistics is None:
+            # if the there is no portfolio statistics, we do nothing
+            # The implication is the the self._summary = None
+            return
 
         initial_capital = self._portfolio.initial_capital
         ndays = self._portfolio_statistics.shape[0]
@@ -177,7 +183,7 @@ class DollarNeutralPortfolioAnalyser(AnalyserBase):
                list(self.out_of_sample_with_cost)]
         self._summary = pd.DataFrame(arr,
                                      columns = ['RTN','IR','VOL', 'MDD','LMDD'],
-                                     index   = ['pre_cost','with_cost','oos_pre_cost','oos_with_cost'])
+                                     index   = ['pre_cost','after_cost','oos_pre_cost','oos_after_cost'])
 
 
 

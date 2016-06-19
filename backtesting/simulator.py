@@ -13,12 +13,24 @@ to evaluate the input strategy.
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import pandas as pd
+
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+
 from os import path
 from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
+from .strategy import Strategy
+
+import logging
+
+
+logger = logging.getLogger('main.simulator')
+logger.setLevel(logging.INFO)
+logger.propagate = True
 
 
 class Simulator(object):
@@ -55,7 +67,7 @@ class Simulator(object):
 
 class MyFirstSimulator(Simulator) :
 
-    def __init__(self, priceDF=None, portfolio=None, rebalancer=None, analyser=None, fitness_measure=None,lookback=20):
+    def __init__(self, priceDF=None, portfolio=None, rebalancer=None, analyser=None, fitness_measure=None, globals=None, lookback=20):
         if any(v is None for v in [priceDF, portfolio, rebalancer, analyser]):
             raise ValueError("Some parameters are missing.")
 
@@ -63,7 +75,9 @@ class MyFirstSimulator(Simulator) :
         self._rebalancer      = rebalancer
         self._analyser        = analyser
         self._fitness_measure = fitness_measure
+        self._globals         = globals
         self._statistics      = None
+        self._fitness         = None
 
 
         self._priceDF    = priceDF
@@ -80,11 +94,29 @@ class MyFirstSimulator(Simulator) :
 
 
 
-    def simulate(self, strategyDF, expression=None):
-        assert strategyDF.shape == self._priceDF.shape
+    def simulate(self, strategyDF=None, expression=None, use_expression=False):
 
-        if expression:
-            self._expression = expression
+        # clear historical statistics
+        self._statistics = None
+        self._expression = expression
+        self._fitness = None
+
+        logger.info("Simulating {}".format(self._expression))
+
+        if use_expression:
+            assert expression is not None
+            assert self._globals is not None
+            try:
+                strategyDF = eval(expression, self._globals)
+            except Exception as e:
+                return
+        else:
+            assert strategyDF is not None
+            assert strategyDF.shape == self._priceDF.shape
+
+
+
+        self._expression = expression
 
 
         self._strategyDF = strategyDF.apply(self._portfolio.normalize_weights, axis=1)
@@ -198,7 +230,8 @@ class MyFirstSimulator(Simulator) :
         c.drawString(220, 730, datetime.now().ctime())
         c.drawImage(plot_path, 45, 390, width=18 * cm, height=11.5 * cm)
 
-        string_to_write = self.summarize(to_print=False)
+        self.summarize(to_print=False)
+        string_to_write = self._summary4report
 
         dy = 10
         x  = 60
@@ -230,6 +263,9 @@ class MyFirstSimulator(Simulator) :
         self._analyser.rebalancer            = self._rebalancer
         self._analyser.process()
 
+        if self._fitness_measure:
+            self._fitness  = self._fitness_measure.measure(self._analyser.summary)
+
 
 
     def summarize(self, to_print=True):
@@ -237,13 +273,32 @@ class MyFirstSimulator(Simulator) :
         line_ = '=' * len(line)
 
         line_2 = self._analyser.summarize(to_print=False)
-        out =  '\n'.join([line_, line, line_, '\n', self._expression, '\n', line_2])
+
+        # break the expression with fixed width. Sometimes the expression becomes too long
+        width = 55
+        l = len(self._expression)
+        i = 0
+        out_expr = []
+        while i < l:
+            out_expr.append(self._expression[i:min(i + width, l)])
+            i +=  width
+        new_expression = '\n'.join(out_expr)
+
+        # Combine all the output together. This is the final output
+        out =  '\n'.join([line_, line, line_, '\n', new_expression, '\n', line_2])
+        self._summary4report = out
 
         if to_print:
             print(out)
 
-        return out
 
+
+    def output_strategy(self):
+        return Strategy(expression=self._expression,
+                        summary=self._analyser.summary,
+                        fitness=self._fitness,
+                        simulation_summary=self.summarize(to_print=False)
+                        )
 
     @property
     def statistics(self):
